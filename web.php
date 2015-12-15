@@ -1,26 +1,43 @@
 <?php
-$CLASS = 'web'; class web { // webkey, get, put 
+$CLASS = 'web'; class web {
 	public $iscli = false;
 	public function __construct( $iscli = true) { $this->iscli = $iscli; }
-	// webkey for secured access
-	public function makewebkey( $libdir = null, $stuffdir = null, $length = 10) { // the key is a substring of [libdir + stuffdir + time] -- stored in webkey.json in libdir
-		if ( ! $libdir || ! is_dir( $libdir) || ! $stuffdir || ! is_dir( $stuffdir)) die( " ERROR! webkey make() needs libdir(abspath) stuffdir(abspath) [length=10]\n");
-		$h = array(); if ( is_file( "$libdir/webkey.json")) $h = jsonload( "$libdir/webkey.json");
+	// SECTION:  webkey for secured access
+	public function make( $libdir = null, $stuffdir = null, $length = 10) { // { md5: stuffdir, ...} > libdir/webkeys.json
+		if ( ! $libdir || ! is_dir( $libdir) || ! $stuffdir || ! is_dir( $stuffdir)) die( " ERROR! make() needs libdir[abspath] stuffdir[abspath] [length=10]\n");
+		$h = array(); if ( is_file( "$libdir/webkeys.json")) $h = jsonload( "$libdir/webkeys.json");
 		$md5 = md5( "$libdir  $stuffdir " . tsystem()); $md5p = substr( $md5, 0, $length);
-		$h[ $md5p] = $stuffdir; jsondump( $h, "$libdir/webkey.json");
-		echo "$md5p   for stuff in $stuffdir -- use code as webkey in GET/POST requests\n";
+		$h[ $md5p] = $stuffdir; jsondump( $h, "$libdir/webkeys.json");
+		echo "OK, key/stuffdir map   " . htt( $h) . "   in $libdir/webkeys.json";
 	}
-	public function regwebkey( $key = null, $tag = null, $cldir = null) { // the key is always stored in CLDIR 
+	public function tag( $key = null, $tag = null, $cldir = null) { // { tag: md5, ...} > cldir/webtags.json -- cldir=/code/web when using 'phpweb' 
 		global $CLDIR; if ( ! $cldir) $cldir = $CLDIR;
-		if ( ! $key || ! $tag) die( " ERROR! regwebkey() params: key(remote webkey) tag(local)\n");
-		$h = array(); if ( is_file( "$cldir/web.json")) $h = jsonload( "$cldir/web.json");
-		$h[ $tag] = $key; jsondump( $h, "$cldir/web.json");
-		echo "OK, list of keys: " . ltt( hk( $h), '  ') . "\n";
+		if ( ! $key || ! $tag) die( " ERROR! tag() params:  key[output of makewebkey()]  tag[your string]\n");
+		$h = array(); if ( is_file( "$cldir/webtags.json")) $h = jsonload( "$cldir/webtags.json");
+		$h[ $tag] = $key; jsondump( $h, "$cldir/webtags.json");
+		echo "OK, key/tag map   " . htt( $h) . "   in $cldir/webtags.json\n";
 	}
-	public function showebkeys( $cldir = null) { 
-		global $CLDIR; if ( ! $cldir) $cldir = $CLDIR; $h = is_file( "$cldir/web.json") ? jsonload( "$cldir/web.json") : array(); echo ltt( hk( $h), '  ') . "\n"; 
+	public function place( $name = null, $iport = null, $tag = null, $cldir = null) { // { ipport: tag, ...} > cldir/webplaces.json   -- cldir=/code/web when using 'phpweb'
+		global $CLDIR; if ( ! $cldir) $cldir = $CLDIR;
+		if ( ! $name || ! $iport || ! $tag) die( " ERROR! place() params:  place[your string]  iport[ip:port]  tag[from regwebkey()]\n");
+		$h = array(); if ( is_file( "$cldir/webplaces.json")) $h = jsonload( "$cldir/webplaces.json");
+		$h[ $name] = "$iport | $tag"; jsondump( $h, "$cldir/webplaces.json");
+		echo "OK, iport map  " . htt( $h) . "   in $cldir/webplaces.json\n";
 	}
-	// primitive actions
+	public function show( $cldir = null) { 
+		global $CLDIR; if ( ! $cldir) $cldir = $CLDIR; 
+		foreach ( ttl( 'keys,tags,places') as $k) { $f = $cldir . '/web' . $k; echo "$k: " . ( is_dir( $cldir) && is_file( $f) ? htt( jsonload( $f)) : '') . "\n"; }
+	}
+	private function load( $place = null, $tag = null, $cldir = null) { // returns [ iport, tag, webkey]  -- resolves name>iport>tag>key or tag>key
+		global $CLDIR; if ( ! $cldir) $cldir = $CLDIR; $iport = null;
+		if ( ! $place && ! $tag) die( " ERROR! load() cannot have both iport and tag empty, need one of them to resolve.");
+		if ( $place && ! is_file( "$cldir/webplaces.json")) die( " ERROR! load() no file at $cldir/webplaces.json to lookup place[$place]\n");
+		if ( $place) { $h = jsonload( "$cldir/webplaces.json"); if ( isset( $h[ $place])) extract( lth( ttl( $h[ $place], ' '), 'iport,tag')); }
+		if ( ! is_file( "$cldir/webtags.json")) die( " ERROR! load() no file at $cldir/webtags.json to lookup for tag[$tag]\n");
+		$h = jsonload( "$cldir/webtags.json"); $webkey = isset( $h[ $tag]) ? $h[ $tag] : null;
+		return array( $iport, $tag, $webkey); 
+	}
+	// SECTION: primitive actions
 	public function ping( $what) { die( jsonsend( jsonmsg( $what))); } // for checking if this machine is one
 	public function run( $where = null, $what = null) { // what is a base64( command) 
 		if ( ! $what || ! $where) die( " ERROR! run() params: keytag where(remote dir) what(base64 of command)\n");
@@ -42,6 +59,7 @@ $CLASS = 'web'; class web { // webkey, get, put
 		require_once( "$c.php"); $C = new $c( false); // no output
 		$p = 0; foreach ( ttl( 'one,two,three,four') as $k) if ( $$k) $p++;
 		if ( ! $p) $JO[ 'status'] = $C->$f();
+		if ( $p == 0) $JO[ 'status'] = $C->$f();
 		if ( $p == 1) $JO[ 'status'] = $C->$f( $one);
 		if ( $p == 2) $JO[ 'status'] = $C->$f( $one, $two);
 		if ( $p == 3) $JO[ 'status'] = $C->$f( $one, $two, $three);
@@ -49,92 +67,67 @@ $CLASS = 'web'; class web { // webkey, get, put
 		die( jsonsend( jsonmsg( 'OK')));
 	}
 	public function at( $what, $where = null) { if ( $where) chdir( $where); procat( $what); die( jsonsend( jsonmsg( 'OK'))); }
-	// high-level interface
-	private function loadkey( $keytag = null, $cldir = null) {
-		global $CLDIR; if ( ! $cldir) $cldir = $CLDIR;
-		$h = array(); if ( is_file( "$cldir/web.json")) $h = jsonload( "$cldir/web.json");
-		if ( ! $keytag || ! isset( $h[ $keytag])) return die( " ERROR! loadkey() no such key#$keytag  at $cldir/web.json\n");
-		return $h[ $keytag]; // return the key itself
-	}
-	public function server( $port = 8002) { $myip = clmyip(); system( "php -S $myip:$port -t ."); } // starts server in current dir 
-	public function syncin( $iport = null, $keytag = null, $remotewhere = null, $remotewhat = null, $localwhere = null, $cldir = null) { 
-		if ( ! $iport || ! $remotewhere || ! $remotewhat || ! $localwhere) die( " ERROR! syncin()  iport  keytag  remotewhere  remotewhat  localwhere\n");
-		$webkey = $this->loadkey( $keytag, $cldir);
-		// step 1: run( tar jcvf)
-		if ( $this->iscli) echo "step 1: run  "; $file = 'temp.' . tsystem() . '.temp.tbz'; 
-		$action = 'run'; $one = $remotewhere; $two = "tar jcvf $file $remotewhat"; $h = compact( ttl( 'webkey,action,one,two')); if ( $this->iscli) echo jsonraw( $h) . "\n";
-		if ( $this->iscli) echo "step 1: wget..."; list( $s, $h) = procwget( "http://$iport", $h);
-		if ( ! $s || ! $h) { if ( $this->iscli) die( " ERROR ($s/$h=" . jsonraw( compact( ttl( 's,h'))) . ")\n"); return false; }
-		if ( $this->iscli) echo " OK\n";
-		// step 2: get( file)
-		if ( $this->iscli) echo "step 2: get( $remotewhere/$file): "; $cwd = getcwd(); chdir( $localwhere); 
-		$action = 'get'; $one = $remotewhere; $two = $file; $h = compact( ttl( 'webkey,action,one,two')); $file2 = procwgetdownload( "http://$iport", $file, $h, true);
-		if ( ! $file2 || $file != $file2) { if ( $this->iscli) die( " ERROR! syncin() could not download file2#$file2 = file#$file  in localwhere#$localwhere\n"); return false; }
-		if ( $this->iscli) echo " > $localwhere/$file (" . filesize( $file2) . " bytes)\n"; chdir( $cwd);
-		// step 3: rm old and untar 
-		if ( $this->iscli) echo "step 3: rm old ($localwhere/$remotewhat)..."; $cwd = getcwd(); chdir( $localwhere); procpipe( "rm -Rf $remotewhat"); chdir( $cwd); if ( $this->iscli) echo " OK\n";
-		if ( $this->iscli) echo "step 3: untar $file in $localwhere..."; $cwd = getcwd(); chdir( $localwhere); procpipe( "tar jxvf $file"); `rm -Rf $file`; chdir( $cwd); if ( $this->iscli) echo " OK\n";
-		// step 4: remove the temp file remotely
-		if ( $this->iscli) echo "step 4: run ";  $action = 'run'; $one = $remotewhere; $two = "rm -Rf $file"; $h = compact( ttl( 'webkey,action,one,two')); if ( $this->iscli) echo jsonraw( $h) . "\n";
-		if ( $this->iscli) echo "step 4: wget..."; list( $s, $h) = procwget( "http://$iport", $h); if ( $this->iscli) echo " OK\n"; // no need to check the status
-		`rm -Rf $localwhere/$file`; return true;
-	}
-	public function syncout( $iport = null, $keytag = null, $localwhere = null, $localwhat = null, $remotewhere = null, $cldir = null) { 
-		if ( ! $iport || ! $localwhere || ! $localwhat || ! $remotewhere) die( " ERROR! syncout() params:  iport  keytag  localwhere  localwhat  remotewhere\n");
-		$webkey = $this->loadkey( $keytag, $cldir);
-		// step 1: tar
-		if ( $this->iscli) echo "step1: local tar ( $localwhat in $localwhere)"; $file = 'temp.' . tsystem() . '.temp.tbz'; if ( $this->iscli) echo " > $file..."; 
-		$cwd = getcwd(); chdir( $localwhere); procpipe( "tar jcvf $file $localwhat"); chdir( $cwd); if ( $this->iscli) echo " OK\n";
-		// step 2: put
-		if ( $this->iscli) echo "step 2: put( $localwhere/$localwhat > $remotewhere)... "; 
-		$in = fopen( "$localwhere/$file", 'rb'); $one = s2s64( fread( $in, filesize( "$localwhere/$file"))); fclose( $in); if ( $this->iscli) echo strlen( $one) . " bytes to send\n"; 
-		$action = 'put'; $two = $remotewhere; $three = $file; $h = compact( ttl( 'webkey,action,one,two,three')); if ( $this->iscli) echo "step 2: wget " . jsonraw( $h) . '... '; 
-		list( $s, $h) = procwpost( "http://$iport", $h);
-		if ( ! $s || ! $h) { if ( $this->iscli) die( " ERROR ($s/$h=" . jsonraw( compact( ttl( 's,h'))) . ")\n"); return false; }
-		if ( $this->iscli) echo " OK\n"; //`rm -Rf $localwhere/$file`; 
-		// step 3: remove old version remotely
-		if ( $this->iscli) echo "step 3: run(remote rm) "; $action = 'run'; $one = $remotewhere; $two = "rm -Rf $localwhat"; $h = compact( ttl( 'webkey,action,one,two')); if ( $this->iscli) echo jsonraw( $h) . "\n";
-		if ( $this->iscli) echo "step 3: wget..."; list( $s, $h) = procwget( "http://$iport", $h); if ( $this->iscli) echo " OK\n"; // no need to check the status
-		// step 4: untar remotely
-		if ( $this->iscli) echo "step 4: run(untar at remote $remotewhere/$file)...";  $action = 'run'; $one = $remotewhere; 
-		$two = "tar jxvf $file"; $h = compact( ttl( 'webkey,action,one,two')); if ( $this->iscli) echo jsonraw( $h) . "\n";
-		if ( $this->iscli) echo "step 4: wget..."; list( $s, $h) = procwget( "http://$iport", $h);
-		if ( ! $s || ! $h) { if ( $this->iscli) die( " ERROR ($s/$h=" . jsonraw( compact( ttl( 's,h'))) . ")\n"); return false; } 
-		if ( $this->iscli) echo " OK\n";
-		// step 5: remove the temp file remotely
-		if ( $this->iscli) echo "step 5: run(remote rm) "; $action = 'run'; $one = $remotewhere; $two = "rm -Rf $file"; $h = compact( ttl( 'webkey,action,one,two')); if ( $this->iscli) echo jsonraw( $h) . "\n";
-		if ( $this->iscli) echo "step 5: wget..."; list( $s, $h) = procwget( "http://$iport", $h); if ( $this->iscli) echo " OK\n"; // no need to check the status
-		`rm -Rf $localwhere/$file`; return array( $s, $h);
-	}
-	public function rrun( $iport = null, $keytag = null, $remotewhat = null, $remotewhere = null, $cldir = null) { 
-		if ( ! $iport || ! $remotewhat) die( " ERROR! rrun() params: iport  remotewhere  remotewhat\n");
-		$webkey = $this->loadkey( $keytag, $cldir);
+	// SECTION: high-level interface
+	public function server( $port = 8002) { $myip = clmyip(); $c = "php -S $myip:$port -t ."; echo "$c\n"; system( $c); } // starts server in current dir 
+	public function rrun( $place = null, $remotewhat = null, $remotewhere = null, $cldir = null) { 
+		if ( ! $place || ! $remotewhat) die( " ERROR! rrun() params: place remotewhat remotewhere [cldir]\n");
+		list( $iport, $keytag, $webkey) = $this->load( $place, null, $cldir); 
 		// step 1: remove old version remotely
 		if ( $this->iscli) echo "step 1: run($remotewhat) by at  "; $action = 'at'; $one = urlencode( $remotewhat); 
 		if ( $remotewhere) { $two = urlencode( $remotewhere); $h = compact( ttl( 'webkey,action,one,two')); if ( $this->iscli) echo jsonraw( $h) . "\n"; }
 		else { $h = compact( ttl( 'webkey,action,one')); if ( $this->iscli) echo jsonraw( $h) . "\n"; }
-		if ( $this->iscli) echo "step 1: wget..."; list( $s, $h) = procwget( "http://$iport", $h); if ( $this->iscli) echo " OK" . jsonraw( compact( ttl( 's,h'))) . "\n"; // no need to check the status
+		if ( $this->iscli) echo "step 2: wget..."; list( $s, $h) = procwget( "http://$iport", $h); if ( $this->iscli) echo " OK" . jsonraw( compact( ttl( 's,h'))) . "\n"; // no need to check the status
 		if ( ! $s || ! $h) { if ( $this->iscli) die( " ERROR ($s/$h=" . jsonraw( compact( ttl( 's,h'))) . ")\n"); return false; } 
 		return array( $s, $h);
 	}
-	public function rcall( $iport = null, $keytag = null, $remotewhere = null, $classfunction = null, $params = array(), $cldir = null) { // params: [ param1, param2, ...]
-		if ( ! $iport || ! $remotewhere || ! $classfunction) die( " ERROR! rcall() params: iport  keytag remotewhere classfunction params\n");
-		$webkey = $this->loadkey( $keytag, $cldir);
+	public function rcall( $place = null,  $remotewhere = null, $classfunction = null, $params = array(), $cldir = null) { // params: [ param1, param2, ...]
+		if ( ! $place || ! $remotewhere || ! $classfunction) die( " ERROR! rcall() params: place remotewhere classfunction params\n");
+		list( $iport, $keytag, $webkey) = $this->load( $place); 
 		$pnames = ttl( 'three,four,five,six'); if ( is_string( $params)) $params = ttl( $params);
 		while ( count( $pnames) > count( $params)) lpop( $pnames); $params = lth( $params, $pnames);
 		// step 1: remove old version remotely
 		if ( $this->iscli) echo "step 1: call($classfunction at $remotewhere) by at  "; $action = 'call'; $one = $remotewhere; $two = $classfunction; 
 		$h = hm( compact( ttl( 'webkey,action,one,two')), $params); foreach ( $h as $k => $v) $h[ $k] = urlencode( $v); if ( $this->iscli) echo jsonraw( $h) . "\n";
-		if ( $this->iscli) echo "step 1: wget..."; list( $s, $h) = procwget( "http://$iport", $h); if ( $this->iscli) echo " OK" . jsonraw( compact( ttl( 's,h'))) . "\n"; // no need to check the status
+		if ( $this->iscli) echo "step 2: wget..."; list( $s, $h) = procwget( "http://$iport", $h); if ( $this->iscli) echo " OK" . jsonraw( compact( ttl( 's,h'))) . "\n"; // no need to check the status
 		if ( ! $s || ! $h) { if ( $this->iscli) die( " ERROR ($s/$h=" . jsonraw( compact( ttl( 's,h'))) . ")\n"); return false; } 
 		return array( $s, $h);
 	}
-	public function tellwhenon( $keytag = null, $iport = null, $cldir = null) { 
-		if ( ! $keytag || ! $iport) die( " ERROR! tellwhenon()  keytag  iport\n");
-		$webkey = $this->loadkey( $keytag, $cldir); $action = 'ping'; $one = 'myping'; $h = compact( ttl( 'webkey,action,one'));
+	public function tellwhenon( $place, $cldir = null) { 
+		if ( ! $place) die( " ERROR! tellwhenon()  $place\n");
+		list( $iport, $keytag, $webkey) = $this->load( $place); $action = 'ping'; $one = 'myping'; $h = compact( ttl( 'webkey,action,one'));
  		$b = tsystem(); $e = echoeinit(); 
- 		while ( 1) { list( $s, $h) = procwget( $iport, $h); if ( $this->iscli) echoe( $e, tshinterval( tsystem(), $b) . '  ' . jsonraw( compact( ttl( 's,h')))); if ( $s && $h) break; sleep( 10); }
+ 		while ( 1) { list( $s, $h) = procwget( "http://$iport", $h); if ( $this->iscli) echoe( $e, tshinterval( tsystem(), $b) . '  ' . jsonraw( compact( ttl( 's,h')))); if ( $s && $h) break; sleep( 10); }
 		if ( $this->iscli) echo " OK($iport is on)\n"; return true;
+	}
+	// SECTION: tasks  -- use it when you need to run a command on a non-reachable machine     poll/notify logic
+	public function notify( $source = null, $task = null, $cldir = null) { // { source: [ commands], ...} > /cldirtask is base64() of a commandline  -- run at reachable machine
+		global $CLDIR; if ( ! $cldir) $cldir = $CLDIR;
+		if ( ! $source || ! $task) die( " ERROR! notify()  source[your string]  task[command > base64]");
+		$h = is_file( "$cldir/webtasks.json") ? jsonload( "$cldir/webtasks.json") : array();
+		htouch( $h, $source); lpush( $h[ $source], $task); jsondump( $h, "$cldir/webtasks.json");
+		echo "notify()  next[" . lfirst( $h[ $source]) . "]   (" . count( $h[ $source]) . ") in stack\n";
+	}
+	public function shift( $source = null, $cldir = null) { // remote web-call, shifts the last notify-command for this source
+		global $CLDIR; if ( ! $cldir) $cldir = $CLDIR;
+		if ( ! $source) die( " ERROR! shift()  source[your string]   [cldir]");
+		$h = is_file( "$cldir/webtasks.json") ? jsonload( "$cldir/webtasks.json") : array();
+		$task = isset( $h[ $source]) && count( $h[ $source]) ? lshift( $h[ $source]) : null; jsondump( $h, "$cldir/webtasks.json");
+		jsonsend( $task);
+	}
+	public function poll( $place = null, $source = null, $remotewhere = null, $cldir = null) { // run at non-reachable machine
+		global $CLDIR; if ( ! $cldir) $cldir = $CLDIR;
+		if ( ! $place || ! $source) die( " ERROR! poll()   place[name regged locally]  source[source regged and used remotely]   [remotewhere]\n");
+		list( $iport, $keytag, $webkey) = $this->load( $place); $sleep = 3; $last = tsystem(); $e = echoeinit();
+		while ( 1) { 
+			if ( tsystem() - $last > 300) $sleep = 30; sleep( $sleep);
+			$action = 'shift'; $one = $source; 
+			$h = compact( ttl( 'webkey,action,one')); if ( $remotewhere) $h[ 'two'] = $remotewhere; foreach ( $h as $k => $v) $h[ $k] = urlencode( $v); 
+			list( $s, $h) = procwget( "http://$iport", $h); if ( ! $h) { echoe( $e, tsystemstamp() . " (" . tshinterval( $last) . ")"); continue; }
+			// there is a command!
+			$e = echoeinit(); $b = tsystem(); $sleep = 3; 
+			echo "  $h..."; echopipee( $h); echo " OK( " . tshinterval( tsystem(), $b) . ")\n";
+		}
+		
 	}
 	
 }
@@ -149,7 +142,7 @@ if ( isset( $argv) && count( $argv) && strpos( $argv[ 0], "$CLASS.php") !== fals
 	chdir( clgetdir()); clparse(); $JSONENCODER = 'jsonencode'; // jsonraw | jsonencode    -- jump to lib dir
 	// help
 	clhelp( "FORMAT: php$CLASS WDIR COMMAND param1 param2 param3...     ($CLNAME)");
-	foreach ( file( $CLNAME) as $line) if ( strpos( trim( $line), 'public function') === 0 && strpos( $line, '__construct') === false) clhelp( trim( str_replace( 'public function', '', $line)));
+	foreach ( file( $CLNAME) as $line) if ( ( strpos( trim( $line), '// SECTION:') === 0 || strpos( trim( $line), 'public function') === 0) && strpos( $line, '__construct') === false) clhelp( trim( str_replace( 'public function', '', $line)));
 	// parse command line
 	lshift( $argv); if ( ! count( $argv)) die( clshowhelp()); 
 	//$wdir = lshift( $argv); if ( ! is_dir( $wdir)) { echo "ERROR! wdir#$wdir is not a directory\n\n"; clshowhelp(); die( ''); }
@@ -179,6 +172,7 @@ if ( ! isset( $argv) && ( isset( $_GET) || isset( $_POST)) && ( $_GET || $_POST)
 	// actions: [wdir] is fixed/predefined  [action] is function name   others are [one,two,three,...]
 	$O = new $CLASS( false, $wdir);  // does not pass [types], expects the user to run init() once locally before using it remotely 
 	$p = array(); foreach ( ttl( 'one,two,three,four,five,six') as $k) if ( isset( $$k)) lpush( $p, $$k); $R = array();
+	if ( count( $p) == 0) $R = $O->$action();
 	if ( count( $p) == 1) $R = $O->$action( $one);
 	if ( count( $p) == 2) $R = $O->$action( $one, $two);
 	if ( count( $p) == 3) $R = $O->$action( $one, $two, $three);

@@ -1,6 +1,6 @@
 <?php
 $CLASS = 'my3wayscript'; class my3wayscript { 
-	public $iscli = false;
+	public $iscli = true; // set to false in web mode
 	
 }
 // CLI fork
@@ -14,7 +14,7 @@ if ( isset( $argv) && count( $argv) && strpos( $argv[ 0], "$CLASS.php") !== fals
 	chdir( clgetdir()); clparse(); $JSONENCODER = 'jsonencode'; // jsonraw | jsonencode    -- jump to lib dir
 	// help
 	clhelp( "FORMAT: php$CLASS WDIR COMMAND param1 param2 param3...     ($CLNAME)");
-	foreach ( file( $CLNAME) as $line) if ( strpos( trim( $line), 'public function') === 0 && strpos( $line, '__construct') === false) clhelp( trim( str_replace( 'public function', '', $line)));
+	foreach ( file( $CLNAME) as $line) if ( ( strpos( trim( $line), '// SECTION:') === 0 || strpos( trim( $line), 'public function') === 0) && strpos( $line, '__construct') === false) clhelp( trim( str_replace( 'public function', '', $line)));
 	// parse command line
 	lshift( $argv); if ( ! count( $argv)) die( clshowhelp()); 
 	//$wdir = lshift( $argv); if ( ! is_dir( $wdir)) { echo "ERROR! wdir#$wdir is not a directory\n\n"; clshowhelp(); die( ''); }
@@ -42,8 +42,9 @@ if ( ! isset( $argv) && ( isset( $_GET) || isset( $_POST)) && ( $_GET || $_POST)
 	//$h = jsonload( 'webkey.json'); if ( ! isset( $h[ "$webkey"])) die( jsonsend( jsonerr( 'no such webkey in your current environment')));
 	//$wdir = $h[ "$webkey"]; if ( ! is_dir( "$wdir")) die( jsonsend( jsonerr( "no dir $wdir in local filesystem, webkey env is wrong")));
 	// actions: [wdir] is fixed/predefined  [action] is function name   others are [one,two,three,...]
-	$O = new $CLASS( false);  // does not pass [types], expects the user to run init() once locally before using it remotely 
+	$O = new $CLASS( false); $O->iscli = false; // does not pass [types], expects the user to run init() once locally before using it remotely 
 	$p = array(); foreach ( ttl( 'one,two,three,four,five') as $k) if ( isset( $$k)) lpush( $p, $$k); $R = array();
+	if ( count( $p) == 0) $R = $O->$action();
 	if ( count( $p) == 1) $R = $O->$action( $one);
 	if ( count( $p) == 2) $R = $O->$action( $one, $two);
 	if ( count( $p) == 3) $R = $O->$action( $one, $two, $three);
