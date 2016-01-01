@@ -20,4 +20,4 @@ RUN \
 # set the working directory
 EXPOSE 8001
 WORKDIR /3way
-CMD [ "php example.php server 0.0.0.0:8001"]
+#CMD [ "php", "php example.php server 0.0.0.0:8001"]
