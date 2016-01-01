@@ -1,0 +1,3 @@
+FROM php
+COPY . /
+CMD [ "php", "/plain.php"]

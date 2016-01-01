@@ -67,28 +67,29 @@ $PLOTDONOTSCALE = false;
 define( 'FPDF_FONTPATH',  "$ABDIR/lib/fpdf/font/");
 // pdf
 $XPDF = '/usr/local/xpdf/bin';
-// lucene setup
-iconv_set_encoding( "input_encoding", "UTF-8");
-iconv_set_encoding( "internal_encoding", "UTF-8");
-iconv_set_encoding( "output_encoding", "UTF-8");
-mb_internal_encoding( "UTF-8");
-if ( is_dir( "/usr/local/zend")) {	// if path does not exist, do not make fuss, just let it me -- lucene is probably not used in these cases
-	set_include_path( '/usr/local/zend/library');
-	require_once( 'Zend/Search/Lucene.php');
-	Zend_Search_Lucene_Search_QueryParser::setDefaultEncoding( 'UTF-8');
-	// analyzers
-	//Zend_Search_Lucene_Analysis_Analyzer::setDefault( new Zend_Search_Lucene_Analysis_Analyzer_Common_TextNum_CaseInsensitive());
-	//Zend_Search_Lucene_Analysis_Analyzer::setDefault( new Zend_Search_Lucene_Analysis_Analyzer_Common_Utf8());
-	//Zend_Search_Lucene_Analysis_Analyzer::setDefault( new Zend_Search_Lucene_Analysis_Analyzer_Common_Utf8Num());
-	require_once( "$ABDIR/lib/Utf8MbcsUnigram.php");
-	Zend_Search_Lucene_Analysis_Analyzer::setDefault( new Twk_Search_Lucene_Analysis_Analyzer_Common_Utf8MbcsUnigram());
+if ( ! isset( $STANDALONEMODE) || ! $STANDALONEMODE)  { // lucene setup
+	iconv_set_encoding( "input_encoding", "UTF-8");
+	iconv_set_encoding( "internal_encoding", "UTF-8");
+	iconv_set_encoding( "output_encoding", "UTF-8");
+	mb_internal_encoding( "UTF-8");
+	if ( is_dir( "/usr/local/zend")) {	// if path does not exist, do not make fuss, just let it me -- lucene is probably not used in these cases
+		set_include_path( '/usr/local/zend/library');
+		require_once( 'Zend/Search/Lucene.php');
+		Zend_Search_Lucene_Search_QueryParser::setDefaultEncoding( 'UTF-8');
+		// analyzers
+		//Zend_Search_Lucene_Analysis_Analyzer::setDefault( new Zend_Search_Lucene_Analysis_Analyzer_Common_TextNum_CaseInsensitive());
+		//Zend_Search_Lucene_Analysis_Analyzer::setDefault( new Zend_Search_Lucene_Analysis_Analyzer_Common_Utf8());
+		//Zend_Search_Lucene_Analysis_Analyzer::setDefault( new Zend_Search_Lucene_Analysis_Analyzer_Common_Utf8Num());
+		require_once( "$ABDIR/lib/Utf8MbcsUnigram.php");
+		Zend_Search_Lucene_Analysis_Analyzer::setDefault( new Twk_Search_Lucene_Analysis_Analyzer_Common_Utf8MbcsUnigram());
+	}
+	else if ( is_dir( 'zend')) {
+		set_include_path( 'zend');
+		require_once( 'Zend/Search/Lucene.php');
+		Zend_Search_Lucene_Search_QueryParser::setDefaultEncoding('UTF-8');
+	}
+	@require_once 'Zend/Search/Lucene/Analysis/Analyzer.php';
 }
-else if ( is_dir( 'zend')) {
-	set_include_path( 'zend');
-	require_once( 'Zend/Search/Lucene.php');
-	Zend_Search_Lucene_Search_QueryParser::setDefaultEncoding('UTF-8');
-}
-@require_once 'Zend/Search/Lucene/Analysis/Analyzer.php';
 
 
 
