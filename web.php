@@ -39,10 +39,16 @@ $CLASS = 'web'; class web {
 	}
 	// SECTION: primitive actions
 	public function ping( $what) { die( jsonsend( jsonmsg( $what))); } // for checking if this machine is one
+	public function exec( $where = null, $what = null, $how = null) { // what is base64( file content), how is base64( command)    cli is $how $tempfile
+		if ( ! $where || ! $what || ! $how) return jsonsend( jsonerr( 'bad params'));
+		$cwd = getcwd(); chdir( $where); 
+		$file = ftempname(); $out = fopen( $file, 'w'); fwrite( $out, s642s( $what)); fclose( $out); 
+		$H = procpipe( s642s( $how) . " $file"); @system( "rm -Rf $file"); chdir( $cwd); die( jsonsend( $H));
+	}
 	public function run( $where = null, $what = null) { // what is a base64( command) 
 		if ( ! $what || ! $where) die( " ERROR! run() params: keytag where(remote dir) what(base64 of command)\n");
 		//jsondump( compact( ttl( 'what,where')), '/startup/run.json');
-		$cwd = getcwd(); chdir( $where); procpipe( $what); chdir( $cwd); die( jsonsend( jsonmsg( 'ok'))); 
+		$cwd = getcwd(); chdir( $where); $H = procpipe( s642s( $what)); chdir( $cwd); die( jsonsend( $H)); 
 	}
 	public function get( $where = null, $what = null) { // returns abs dir pointing to what locally 
 		if ( ! $what || ! $where) die( " ERROR! get() params: where(remote dir) what(file in remote dir)\n");
@@ -68,7 +74,7 @@ $CLASS = 'web'; class web {
 	}
 	public function at( $what, $where = null) { if ( $where) chdir( $where); procat( $what); die( jsonsend( jsonmsg( 'OK'))); }
 	// SECTION: high-level interface
-	public function server( $port = 8002) { $myip = clmyip(); $c = "php -S $myip:$port -t ."; echo "$c\n"; system( $c); } // starts server in current dir 
+	public function server( $iport = '0.0.0.0:8001') { $c = "php -S $iport -t ."; echo "$c\n"; system( $c); } // starts server in current dir 
 	public function rrun( $place = null, $remotewhat = null, $remotewhere = null, $cldir = null) { 
 		if ( ! $place || ! $remotewhat) die( " ERROR! rrun() params: place remotewhat remotewhere [cldir]\n");
 		list( $iport, $keytag, $webkey) = $this->load( $place, null, $cldir); 
@@ -137,8 +143,8 @@ if ( isset( $argv) && count( $argv) && strpos( $argv[ 0], "$CLASS.php") !== fals
 	set_time_limit( 0);
 	ob_implicit_flush( 1);
 	for ( $prefix = is_dir( 'ajaxkit') ? 'ajaxkit/' : ''; ! is_dir( $prefix) && count( explode( '/', $prefix)) < 4; $prefix .= '../'); if ( ! is_file( $prefix . "env.php")) $prefix = '/web/ajaxkit/'; 
-	if ( ! is_file( $prefix . "env.php") || ! is_file( 'requireme.php')) die( "\nERROR! Cannot find env.php in [$prefix] or requireme.php in [.], check your environment! (maybe you need to go to ajaxkit first?)\n\n");
-	if ( is_file( 'requireme.php')) require_once( 'requireme.php'); foreach ( explode( ',', ".,$prefix,$BDIR") as $p) foreach ( array( 'functions', 'env') as $k) if ( is_dir( $p) && is_file( "$p/$k.php")) require_once( "$p/$k.php");
+	if ( ! is_file( $prefix . "env.php") && ! is_file( 'requireme.php')) die( "\nERROR! Cannot find env.php in [$prefix] or requireme.php in [.], check your environment! (maybe you need to go to ajaxkit first?)\n\n");
+	if ( is_file( 'requireme.php')) require_once( 'requireme.php'); else foreach ( explode( ',', ".,$prefix,$BDIR") as $p) foreach ( array( 'functions', 'env') as $k) if ( is_dir( $p) && is_file( "$p/$k.php")) require_once( "$p/$k.php");
 	chdir( clgetdir()); clparse(); $JSONENCODER = 'jsonencode'; // jsonraw | jsonencode    -- jump to lib dir
 	// help
 	clhelp( "FORMAT: php$CLASS WDIR COMMAND param1 param2 param3...     ($CLNAME)");
@@ -156,8 +162,8 @@ if ( ! isset( $argv) && ( isset( $_GET) || isset( $_POST)) && ( $_GET || $_POST)
 	set_time_limit( 0);
 	ob_implicit_flush( 1);
 	for ( $prefix = is_dir( 'ajaxkit') ? 'ajaxkit/' : ''; ! is_dir( $prefix) && count( explode( '/', $prefix)) < 4; $prefix .= '../'); if ( ! is_file( $prefix . "env.php")) $prefix = '/web/ajaxkit/'; 
-	if ( ! is_file( $prefix . "env.php") || ! is_file( 'requireme.php')) die( "\nERROR! Cannot find env.php in [$prefix] or requireme.php in [.], check your environment! (maybe you need to go to ajaxkit first?)\n\n");
-	if ( is_file( 'requireme.php')) require_once( 'requireme.php'); foreach ( explode( ',', ".,$prefix,$BDIR") as $p) foreach ( array( 'functions', 'env') as $k) if ( is_dir( $p) && is_file( "$p/$k.php")) require_once( "$p/$k.php");
+	if ( ! is_file( $prefix . "env.php") && ! is_file( 'requireme.php')) die( "\nERROR! Cannot find env.php in [$prefix] or requireme.php in [.], check your environment! (maybe you need to go to ajaxkit first?)\n\n");
+	if ( is_file( 'requireme.php')) require_once( 'requireme.php'); else foreach ( explode( ',', ".,$prefix,$BDIR") as $p) foreach ( array( 'functions', 'env') as $k) if ( is_dir( $p) && is_file( "$p/$k.php")) require_once( "$p/$k.php");
 	htg( hm( $_GET, $_POST)); $JSONENCODER = 'jsonencode';
 	// check for webkey.json and webkey parameter in request
 	//if ( ! is_file( 'webkey.json') || ! isset( $webkey)) die( jsonsend( jsonerr( 'webkey env not set, run [phpwebkey make] first'))); 
